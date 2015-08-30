@@ -7,7 +7,7 @@ handy to create a paralel library in MP3. Run it once a week and you'll have a n
 to date library for mobile use.
 
 If anyone cares input and output formats can be expanded. For now only Flac is supported
-as input and MP3 and Alac for output.
+as input and MP3 and Alac as output.
 
 <pre>
 Usage: ./bam_converter [options...]
