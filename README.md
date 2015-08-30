@@ -11,7 +11,8 @@ Usage: ./bam_converter [options...]
 Available options are specified in brackets if applicable. The default option is
 indicated by an asterisk
 
-`General options
+<pre>
+General options
     -h, --help                    Show this help
     -d, --daemonize               Daemonize bam_converter
 
@@ -29,4 +30,5 @@ Output options:
 
 Locations:
     -p, --atomicparsley           Specify alternative path to AtomicParsley
-    -f, --ffmpeg                  Specify alternative path to ffmpeg`
+    -f, --ffmpeg                  Specify alternative path to ffmpeg
+</pre>
