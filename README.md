@@ -6,6 +6,9 @@ With the help of ffmpeg this script can convert the format of a music library. T
 handy to create a paralel library in MP3. Run it once a week and you'll have a nice and up
 to date library for mobile use.
 
+If anyone cares input and output formats can be expanded. For now only Flac is supported
+as input and MP3 and Alac for output.
+
 <pre>
 Usage: ./bam_converter [options...]
 
