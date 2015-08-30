@@ -1,0 +1,335 @@
+#!/bin/sh
+
+# This is needed to handle spaces in file names (changes the separator).
+OLDIFS=$IFS
+IFS=$(echo -en "\n\b")
+
+# Defining default settings
+output_location=../tmp
+input_location=$PWD
+output_mode=mp3
+output_quality=320000
+overwrite=-n
+cover_name=folder.jpg
+path_atomicparsley=AtomicParsley
+path_ffmpeg=ffmpeg
+
+displayhelp()
+{
+    echo "BAtch Music Converter"
+    echo ""
+    echo "Usage: ./bam_converter [options...]"
+    echo ""
+    echo "Available options are specified in brackets if applicable. The default option is"
+    echo "indicated by an asterisk"
+    echo ""
+    echo "General options"
+    echo "    -h, --help                    Show this help"
+    echo "    -d, --daemonize               Daemonize bam_converter"
+    echo ""
+    echo "Input options:"
+    echo "    -i, --input_location          Location to read library from ['./'*]"
+    echo ""
+    echo "Output options:"
+    echo "    -o, --output_location         Location to write the new library to ['../'*]"
+    echo "    -m, --output_mode             [mp3*|alac]"
+    echo "    -q, --output_quality          MP3 output quality [128|196|320*]"
+    echo "    -w, --overwrite               Overwrite file if it already exists"
+    echo "    -e, --embed_covers            Embeds cover art file if available. Requires"
+    echo "                                  AtomicParsley if converting to ALAC."
+    echo "    -c, --cover_name              Filename of cover art [folder.jpg*|...]"
+    echo ""
+    echo "Locations:"
+    echo "    -p, --atomicparsley           Specify alternative path to AtomicParsley"
+    echo "    -f, --ffmpeg                  Specify alternative path to ffmpeg"
+}
+
+process_arguments()
+{
+    while :
+    do
+        case "$1" in
+            -h | --help )
+                displayhelp
+                exit 0
+            ;;
+            -d | --daemonize )
+                # nohup ${0} -$q
+                echo Daemonize function not yet implemented: $@
+                exit 0
+            ;;
+            -i | --input_location=* )
+                if [ "$1" = "-i" ]; then
+                    shift
+                    process_input=$1
+                else
+                    process_input=${1#*=}
+                fi
+                if [ -d $process_input ]; then
+                    input_location=$process_input
+                else
+                    printf >&2 'FATAL: Location set as input is not valid: %s\n' "$process_input"
+                    exit 1
+                fi
+                shift
+            ;;
+            -o | --output_location=* )
+                if [ "$1" = "-o" ]; then
+                    shift
+                    process_input=$1
+                else
+                    process_input=${1#*=}
+                fi
+                if [ -d $process_input ]; then
+                    output_location=$process_input
+                else
+                    printf >&2 'FATAL: Location set as output is not valid: %s\n' "$process_input"
+                    exit 1
+                fi
+                shift
+            ;;
+            -m | --output_mode=* )
+                if [ "$1" = "-m" ]; then
+                    shift
+                    process_input=$1
+                else
+                    process_input=${1#*=}
+                fi
+                case "$process_input" in
+                    "alac" )
+                        output_mode=alac
+                    ;;
+                    "mp3" )
+                        output_mode=mp3
+                    ;;
+                    *)  # no more options. Stop while loop
+                        output_mode=mp3
+                        printf >&1 'Output mode set to default: mp3'
+                    ;;
+                esac
+                shift
+            ;;
+            -q | --output_quality=* )
+                if [ "$1" = "-q" ]; then
+                    shift
+                    process_input=$1
+                else
+                    process_input=${1#*=}
+                fi
+                case "$process_input" in
+                    "128" )
+                        output_quality=128000
+                    ;;
+                    "192" )
+                        output_quality=192000                        
+                    ;;
+                    "320" )
+                        output_quality=320000
+                    ;;
+                    *)  # no more options. Stop while loop
+                        output_quality=320000
+                        printf >&1 'Output quality set to default: 320kbps'
+                    ;;
+                esac
+                shift
+            ;;
+            -w | --overwrite )
+                overwrite=-y
+                shift
+            ;;
+            -e | --embed_covers )
+                embed_covers=1
+                shift
+            ;;
+            -c | --cover_name=* )
+                if [ "$1" = "-c" ]; then
+                    shift
+                    process_input=$1
+                else
+                    process_input=${1#*=}
+                fi
+                cover_name=$process_input
+                shift
+            ;;
+            -p | --atomicparsley=* )
+                if [ "$1" = "-p" ]; then
+                    shift
+                    process_input=$1
+                else
+                    process_input=${1#*=}
+                fi
+                if [ -f $process_input ]; then
+                    path_atomicparsley=$process_input
+                else
+                    printf >&2 'FATAL: Path to AtomicParsley is not valid: %s\n' "$process_input"
+                    exit 1
+                fi
+                shift
+            ;;
+            -f | --ffmpeg=* )
+                if [ "$1" = "-f" ]; then
+                    shift
+                    process_input=$1
+                else
+                    process_input=${1#*=}
+                fi
+                if [ -f $process_input ]; then
+                    path_ffmpeg=$process_input
+                else
+                    printf >&2 'FATAL: Path to ffmpeg is not valid: %s\n' "$process_input"
+                    exit 1
+                fi
+                shift
+            ;;
+            --) # End of all options
+                shift
+                break
+            ;;
+            -*)
+                printf >&2 'WARN: Unknown option (ignored): %s\n' "$1"
+                shift
+            ;;
+            *)  # no more options. Stop while loop
+                break
+            ;;
+        esac
+    done
+    
+    # Converting relative paths to absolute paths if necessary.
+    output_location=$(realpath $output_location)
+    input_location=$(realpath $input_location)
+    
+    # Changing working directory to set input location
+    cd $input_location
+    
+    # Setting location for status file
+    status_file=$input_location/bam_converter.tmp
+    
+}
+
+check_requirements()
+{
+    type "$path_ffmpeg" >/dev/null 2>&1 || { echo >&2 "Can not find ffmpeg. Aborting."; exit 1; }
+    if [ "$output_mode" = "alac" ] && [ ! -z "$embed_covers" ]; then
+    {
+        type "$path_atomicparsley" >/dev/null 2>&1 || { echo >&2 "Can not find AtomicParsley. Aborting."; exit 1; }
+    }
+    fi
+    
+    # Check for other instances
+    if [ -f $status_file ]; then
+        printf >&2 'FATAL: bam_converter is already running\n'
+        exit 1
+    fi
+}
+
+clean_exit()
+{
+    echo ""
+    echo Process canceled, cleaning up....
+    local current_file=$(cat $status_file)
+    if [ ! -z "$current_file" ]; then
+        echo Removing $current_file
+        rm $current_file
+    fi
+
+    echo Removing status file    
+    rm $status_file
+    
+    echo done.... exiting.
+    
+    exit 0
+}
+
+convert_directory()
+{
+    local currentbasedir=$PWD
+    
+    # Set target folder appropriately 
+    if [ "$currentbasedir" = "$input_location" ]; then
+        local newdir=$output_location
+    else
+        local newdir=$output_location/${currentbasedir#${input_location}/}
+    fi
+    
+    if [ -f "$cover_name" ]; then
+        mkdir -p $newdir
+        cp $cover_name $newdir/$cover_name
+        if [ "$output_mode" = "mp3" ]; then
+            local embed_mp3=1
+        else
+            local embed_alac=1
+        fi
+    fi
+
+    echo Processing $currentbasedir
+
+    for i in *.flac; do
+        [ $i != '*.flac' ] || continue
+        
+        local newfilename=$newdir/${i%.flac}.$output_extension
+        
+        # Saving current filename to status file so it can be removed if canceled
+        echo $newfilename > "$status_file"
+        
+        [ ! -f "$newfilename" ] || continue
+            
+        mkdir -p $newdir
+        echo -n Writing $newfilename
+        eval $path_ffmpeg -i \"$i\" "$output_parameters" \"$newfilename\" >& /dev/null
+        echo -en "\033[2K\r"
+        
+        if [ ! -z "$embed_alac" ] && [ ! -z "$embed_covers" ]; then
+            echo -n Embedding artwork
+            $path_atomicparsley $newfilename --artwork $cover_name --overWrite >& /dev/null
+            echo -en "\033[2K\r"
+        fi
+        
+        if [ ! -z "$embed_mp3" ] && [ ! -z "$embed_covers" ]; then
+            echo Embedding artwork
+            mv $newfilename $newfilename.tmp
+            $path_ffmpeg -i $newfilename.tmp -i $cover_name -c copy -map 0 -map 1 -metadata:s:v title="Album cover" -metadata:s:v comment="Cover (Front)" $newfilename >& /dev/null
+            rm $newfilename.tmp
+            echo -en "\033[2K\r"
+        fi
+    done
+    
+    echo -en "\033[1A"
+    echo -e "\t\t\t\t\t\t\t\t\t\t    done!    "
+    
+    for d in *; do
+        if [ -d $d ]; then
+            (cd $d; convert_directory)
+        fi
+    done
+}
+
+process_arguments $@
+
+check_requirements
+
+trap clean_exit SIGHUP SIGINT SIGTERM
+
+echo Starting Batch Converter:
+
+if [ $output_mode = "mp3" ]; then
+    output_parameters="$overwrite -ab $output_quality -acodec mp3"
+    output_extension=mp3
+else
+    output_parameters="$overwrite -acodec alac"
+    output_extension=m4a
+fi
+
+# Starts at current working directory and works its way through
+convert_directory
+
+echo Done converting...
+
+echo Removing status file    
+rm $status_file
+
+echo Exiting
+
+IFS=$OLDIFS
+    
+exit 0
