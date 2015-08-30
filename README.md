@@ -6,12 +6,12 @@ With the help of ffmpeg this script can convert the format of a music library. T
 handy to create a paralel library in MP3. Run it once a week and you'll have a nice and up
 to date library for mobile use.
 
+<pre>
 Usage: ./bam_converter [options...]
 
 Available options are specified in brackets if applicable. The default option is
 indicated by an asterisk
 
-<pre>
 General options
     -h, --help                    Show this help
     -d, --daemonize               Daemonize bam_converter
