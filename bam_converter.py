@@ -16,6 +16,7 @@ location =  {   "input": os.getcwd(),
 
 settings =  {   "daemonize": False,
                 "input_format": "flac",
+                "input_extension": "flac",
                 "max_depth": 0,
                 "dry_run": False,
                 "output_format": "mp3",
@@ -47,6 +48,7 @@ def help():
     print("")
     print("Input options:")
     print("    -i, --input_location         Location to read library from ['./'*]")
+    print("    -t, --input_format           [flac*|alac]")
     print("    -m, --max_depth              Max folder depth (set 0 for infinte) [0*]")
     print("")
     print("Output options:")
@@ -85,11 +87,12 @@ def parse_arguments():
 
     options["input"] = parser.add_argument_group('Input options')
     options["input"].add_argument(      "-i",   "--input_location")
+    options["input"].add_argument(     "-t",   "--input_format", choices=['flac', 'alac'], type = str.lower)
     options["input"].add_argument(      "-m",   "--max_depth", type=positive_int)
 
     options["output"] = parser.add_argument_group('Output options')
     options["output"].add_argument(     "-o",   "--output_location")
-    options["output"].add_argument(     "-f",   "--output_format", choices=['mp3', 'alac'], type = str.lower)
+    options["output"].add_argument(     "-f",   "--output_format", choices=['mp3', 'alac', 'flac'], type = str.lower)
     options["output"].add_argument(     "-q",   "--output_quality", choices=[320, 256, 196, 128], type = int)
     options["output"].add_argument(     "-w",   "--overwrite", action="store_true")
     options["output"].add_argument(     "-e",   "--embed_covers", action="store_true")
@@ -141,7 +144,7 @@ def parse_arguments():
     if args.atomicparsley is not None:
         args.atomicparsley = str(os.path.expanduser(args.atomicparsley))
         if(os.path.isfile(args.atomicparsley) == False):
-            print("atomicparsley is not a valid path: "+args.atomicparsley)
+            print("FATAL: atomicparsley is not a valid path: "+args.atomicparsley)
             exit(1)
         else:
             location["embedder"] = args.atomicparsley
@@ -154,6 +157,23 @@ def parse_arguments():
     
     if args.output_format is not None:
         settings["output_format"] = str(args.output_format)
+        if(settings["output_format"] == "mp3"):
+            settings["output_extension"] = "mp3"
+        elif(settings["output_format"] == "flac"):
+            settings["output_extension"] = "flac"
+        elif(settings["output_format"] == "alac"):
+            settings["output_extension"] = "m4a"
+        
+    if args.input_format is not None:
+        settings["input_format"] = str(args.input_format)
+        if(settings["input_format"] == "flac"):
+            settings["input_extension"] = "flac"
+        elif(settings["input_format"] == "alac"):
+            settings["input_extension"] = "m4a"
+    
+    if(settings["input_format"] == settings["output_format"]):
+        print("FATAL: input and output format can not equal")
+        exit(0)
     
     if args.output_quality is not None:
         settings["output_quality"] = args.output_quality
@@ -174,7 +194,7 @@ def check_requirements():
         elif(which(location["alt_converter"]) != None):
             location["converter"] = which(location["alt_converter"])
         else:
-            print("Neither FFMPEG or AVCONV seems to be pressent, exiting...")
+            print("FATAL: Neither FFMPEG or AVCONV seems to be pressent, exiting...")
             exit(1)
     
     if(settings["output_format"] == "alac" and settings["embed_covers"] == True and os.path.isfile(location["embedder"]) == False):
@@ -182,11 +202,11 @@ def check_requirements():
             location["embedder"] = which(location["embedder"])
             print("AtomicParsley is found")
         else:
-            print("AtomicParsley seems not to be pressent, exiting...")
+            print("FATAL: AtomicParsley seems not to be pressent, exiting...")
             exit(1)
     
     if(os.path.isfile(location["status"]) == True):
-        print("The target location is already being used by and active instance of bam_extracter, exiting...")
+        print("FATAL: The target location is already being used by and active instance of bam_extracter, exiting...")
         exit(0)
     open(location["status"], "w+").close()
     
@@ -199,7 +219,6 @@ def compile_arguments():
         options = options+" -ab "+str(settings["output_quality"])+"k -acodec mp3"
     elif(settings["output_format"] == "alac"):
         options = options+"  -acodec alac"
-        settings["output_extension"] = "m4a"
     arguments["converter"] = options
 
 def clean_exit(signal, frame):
@@ -235,7 +254,7 @@ def process_locations(path):
         shutil.copy(os.path.join(path, settings["cover_name"]), path_target)
     
     for file in os.listdir(path):
-        if file.lower().endswith("."+settings["input_format"]) is False:
+        if file.lower().endswith("."+settings["input_extension"]) is False:
             continue
         file_input = os.path.join(path, file)
         file_output = os.path.splitext(file)
